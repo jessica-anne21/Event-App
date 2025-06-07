@@ -71,16 +71,20 @@
             @else
                 <div class="space-y-4 mb-6">
                     @foreach ($availableSessions as $session)
-                        <div class="flex items-start p-4 border border-gray-200 rounded-lg shadow-sm bg-white">
+                        @php
+                            $isFull = ($session->max_participants !== null && $session->session_registrations_count >= $session->max_participants);
+                            $isSelectedByUser = in_array($session->id, $selectedSessionIds);
+                        @endphp
+                        <div class="flex items-start p-4 border border-gray-200 rounded-lg shadow-sm bg-white {{ $isFull && !$isSelectedByUser ? 'opacity-60 cursor-not-allowed bg-gray-100' : '' }}">
                             <input type="checkbox"
                                    id="session_{{ $session->id }}"
                                    name="sessions[]"
                                    value="{{ $session->id }}"
-                                   class="mt-1 h-5 w-5 text-primary-blue rounded border-gray-300 focus:ring-primary-blue"
-                                   {{ in_array($session->id, $selectedSessionIds) ? 'checked' : '' }}
-                                   {{ ($session->max_participants && $session->sessionRegistrations->count() >= $session->max_participants && !in_array($session->id, $selectedSessionIds)) ? 'disabled' : '' }}
+                                   class="mt-1 h-5 w-5 text-primary-blue rounded border-gray-300 focus:ring-primary-blue cursor-pointer"
+                                   {{ $isSelectedByUser ? 'checked' : '' }}
+                                   {{ $isFull && !$isSelectedByUser ? 'disabled' : '' }}
                             >
-                            <label for="session_{{ $session->id }}" class="ml-3 flex-1">
+                            <label for="session_{{ $session->id }}" class="ml-3 flex-1 cursor-pointer {{ $isFull && !$isSelectedByUser ? 'cursor-not-allowed' : '' }}">
                                 <strong class="text-lg text-primary-blue">{{ $session->name }}</strong>
                                 <p class="text-sm text-gray-700">
                                     {{ \Carbon\Carbon::parse($session->date)->format('d M Y') }} {{ \Carbon\Carbon::parse($session->start_time)->format('H:i') }} - {{ \Carbon\Carbon::parse($session->end_time)->format('H:i') }}
@@ -88,13 +92,17 @@
                                 <p class="text-sm text-gray-600">
                                     Lokasi: {{ $session->location }} | Narasumber: {{ $session->speaker }}
                                 </p>
-                                @if ($session->max_participants)
-                                    <p class="text-sm text-gray-600">
-                                        Kuota: {{ $session->sessionRegistrations->count() }} / {{ $session->max_participants }}
-                                        @if ($session->sessionRegistrations->count() >= $session->max_participants && !in_array($session->id, $selectedSessionIds))
+                                @if ($session->max_participants !== null)
+                                    <p class="text-sm mt-1">
+                                        Kuota: <span class="font-semibold {{ $isFull ? 'text-red-600' : 'text-green-600' }}">
+                                            {{ $session->session_registrations_count }} / {{ $session->max_participants }}
+                                        </span>
+                                        @if ($isFull && !$isSelectedByUser)
                                             <span class="text-red-600 font-semibold">(Sesi Penuh)</span>
                                         @endif
                                     </p>
+                                @else
+                                    <p class="text-sm mt-1 text-gray-500">Kuota: Tidak Terbatas</p>
                                 @endif
                                 <p class="text-xs text-gray-500 italic mt-1">{{ $session->description }}</p>
                             </label>

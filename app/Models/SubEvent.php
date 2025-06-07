@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany; // Tambahkan ini
 
 class SubEvent extends Model
 {
@@ -21,13 +22,21 @@ class SubEvent extends Model
         'max_participants',
     ];
 
+    // Relasi ke Event utama
     public function event()
     {
         return $this->belongsTo(Event::class);
     }
 
-    public function sessionRegistrations()
+    // Relasi ke pendaftaran sesi
+    public function sessionRegistrations(): HasMany // Tambahkan atau pastikan ini ada
     {
         return $this->hasMany(SessionRegistration::class);
     }
+
+    // --- Optional: Accessor untuk menghitung peserta saat ini ---
+    // public function getCurrentParticipantsAttribute()
+    // {
+    //     return $this->sessionRegistrations()->count();
+    // }
 }

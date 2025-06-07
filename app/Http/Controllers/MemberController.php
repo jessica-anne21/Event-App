@@ -4,19 +4,19 @@ namespace App\Http\Controllers;
 
 use App\Models\Event;
 use App\Models\Registration;
-use App\Models\SubEvent; // Pastikan ini ada
-use App\Models\SessionRegistration; // Pastikan ini ada
+use App\Models\SubEvent;
+use App\Models\SessionRegistration;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Str; // Untuk generate kode unik
-use SimpleSoftwareIO\QrCode\Facades\QrCode; // Install ini: composer require simplesoftwareio/simple-qrcode
+use Illuminate\Support\Str;
+use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Illuminate\Support\Facades\Storage;
 
 class MemberController extends Controller
 {
     public function registerEventForm(Event $event)
     {
-        if (Auth::user()->role !== 'member') { // Pengecekan role
+        if (Auth::user()->role !== 'member') {
             abort(403, 'Anda tidak memiliki akses sebagai Member.');
         }
 
@@ -30,7 +30,7 @@ class MemberController extends Controller
 
     public function registerEvent(Request $request, Event $event)
     {
-        if (Auth::user()->role !== 'member') { // Pengecekan role
+        if (Auth::user()->role !== 'member') {
             abort(403, 'Anda tidak memiliki akses sebagai Member.');
         }
 
@@ -50,21 +50,23 @@ class MemberController extends Controller
         return redirect()->route('member.my_registrations')->with('success', 'Pendaftaran event berhasil! Silakan lakukan pembayaran.');
     }
 
+    // --- METODE YANG HILANG ATAU SALAH myRegistrations() ---
     public function myRegistrations()
     {
         if (Auth::user()->role !== 'member') { // Pengecekan role
             abort(403, 'Anda tidak memiliki akses sebagai Member.');
         }
-        $registrations = Auth::user()->registrations()->with('event')->get();
+        $registrations = Auth::user()->registrations()->with('event', 'sessionRegistrations.subEvent')->get(); // Load relasi sesi juga
         return view('member.my_registrations', compact('registrations'));
     }
+    // --- AKHIR METODE myRegistrations() ---
 
     public function uploadPaymentProof(Request $request, Registration $registration)
     {
-        if (Auth::user()->role !== 'member') { // Pengecekan role
+        if (Auth::user()->role !== 'member') {
             abort(403, 'Anda tidak memiliki akses sebagai Member.');
         }
-        if ($registration->user_id !== Auth::id()) { // Pastikan user hanya bisa upload bukti untuk registrasinya sendiri
+        if ($registration->user_id !== Auth::id()) {
             abort(403, 'Anda tidak berhak mengunggah bukti pembayaran ini.');
         }
 
@@ -85,7 +87,7 @@ class MemberController extends Controller
 
     public function showQrCode(Registration $registration)
     {
-        if (Auth::user()->role !== 'member') { // Pengecekan role
+        if (Auth::user()->role !== 'member') {
             abort(403, 'Anda tidak memiliki akses sebagai Member.');
         }
         if ($registration->user_id !== Auth::id()) {
@@ -95,13 +97,22 @@ class MemberController extends Controller
             return redirect()->back()->with('error', 'Pembayaran Anda belum terverifikasi.');
         }
 
-        $qrCode = QrCode::size(300)->generate($registration->registration_code);
-        return view('member.show_qrcode', compact('qrCode', 'registration'));
+        $qrCodeImage = QrCode::format('png')
+                             ->size(300)
+                             ->margin(2)
+                             ->generate($registration->registration_code);
+
+        $qrCodeFileName = 'qr_' . $registration->registration_code . '.png';
+        $qrCodePath = 'qrcodes/' . $qrCodeFileName;
+
+        Storage::disk('public')->put($qrCodePath, $qrCodeImage);
+
+        return view('member.show_qrcode', compact('qrCodePath', 'registration'));
     }
 
     public function downloadCertificate(Registration $registration)
     {
-        if (Auth::user()->role !== 'member') { // Pengecekan role
+        if (Auth::user()->role !== 'member') {
             abort(403, 'Anda tidak memiliki akses sebagai Member.');
         }
         if ($registration->user_id !== Auth::id()) {
@@ -118,13 +129,12 @@ class MemberController extends Controller
         return redirect()->back()->with('error', 'File sertifikat tidak ditemukan.');
     }
 
-    // --- METODE BARU YANG HARUS DITAMBAHKAN ---
     public function selectSessionsForm(Registration $registration)
     {
-        if (Auth::user()->role !== 'member') { // Pengecekan role
+        if (Auth::user()->role !== 'member') {
             abort(403, 'Anda tidak memiliki akses sebagai Member.');
         }
-        if ($registration->user_id !== Auth::id()) { // Pastikan member hanya bisa memilih sesi untuk registrasinya sendiri
+        if ($registration->user_id !== Auth::id()) {
             abort(403, 'Anda tidak berhak mengelola sesi registrasi ini.');
         }
         if ($registration->payment_status !== 'paid') {
@@ -132,7 +142,7 @@ class MemberController extends Controller
         }
 
         $event = $registration->event;
-        $availableSessions = $event->subEvents()->orderBy('date')->orderBy('start_time')->get();
+        $availableSessions = $event->subEvents()->withCount('sessionRegistrations')->orderBy('date')->orderBy('start_time')->get();
         $selectedSessionIds = $registration->sessionRegistrations->pluck('sub_event_id')->toArray();
 
         return view('member.select_sessions', compact('registration', 'event', 'availableSessions', 'selectedSessionIds'));
@@ -140,10 +150,10 @@ class MemberController extends Controller
 
     public function storeSelectedSessions(Request $request, Registration $registration)
     {
-        if (Auth::user()->role !== 'member') { // Pengecekan role
+        if (Auth::user()->role !== 'member') {
             abort(403, 'Anda tidak memiliki akses sebagai Member.');
         }
-        if ($registration->user_id !== Auth::id()) { // Pastikan member hanya bisa memilih sesi untuk registrasinya sendiri
+        if ($registration->user_id !== Auth::id()) {
             abort(403, 'Anda tidak berhak mengelola sesi registrasi ini.');
         }
         if ($registration->payment_status !== 'paid') {
@@ -157,32 +167,41 @@ class MemberController extends Controller
 
         $selectedSessionIds = $request->input('sessions', []);
 
-        // Hapus sesi yang tidak lagi dipilih
-        $registration->sessionRegistrations()->whereNotIn('sub_event_id', $selectedSessionIds)->delete();
+        $currentSessionRegistrations = $registration->sessionRegistrations->pluck('sub_event_id')->toArray();
 
-        foreach ($selectedSessionIds as $subEventId) {
-            $subEvent = SubEvent::find($subEventId);
-
-            // Periksa apakah sesi valid dan milik event yang sama
-            if (!$subEvent || $subEvent->event_id !== $registration->event_id) {
-                continue; // Lewati sesi yang tidak valid atau bukan milik event ini
-            }
-
-            // Cek kuota sesi sebelum menambahkan
-            if ($subEvent->max_participants && $subEvent->sessionRegistrations()->count() >= $subEvent->max_participants) {
-                // Jika sesi penuh dan user belum terdaftar di sesi itu
-                if (!SessionRegistration::where('registration_id', $registration->id)->where('sub_event_id', $subEventId)->exists()) {
-                     return redirect()->back()->with('error', 'Sesi "' . $subEvent->name . '" sudah penuh. Silakan pilih sesi lain.');
-                }
-            }
-
-            // Tambahkan sesi yang baru dipilih jika belum ada
-            SessionRegistration::firstOrCreate([
-                'registration_id' => $registration->id,
-                'sub_event_id' => $subEventId,
-            ]);
+        $sessionsToRemove = array_diff($currentSessionRegistrations, $selectedSessionIds);
+        if (!empty($sessionsToRemove)) {
+            $registration->sessionRegistrations()->whereIn('sub_event_id', $sessionsToRemove)->delete();
         }
 
-        return redirect()->route('member.my_registrations')->with('success', 'Pilihan sesi Anda berhasil diperbarui.');
+        $sessionsAdded = [];
+        foreach ($selectedSessionIds as $subEventId) {
+            if (!in_array($subEventId, $currentSessionRegistrations)) {
+                $subEvent = SubEvent::withCount('sessionRegistrations')->find($subEventId);
+
+                if (!$subEvent || $subEvent->event_id !== $registration->event_id) {
+                    continue;
+                }
+
+                if ($subEvent->max_participants !== null && $subEvent->session_registrations_count >= $subEvent->max_participants) {
+                    if (!SessionRegistration::where('registration_id', $registration->id)->where('sub_event_id', $subEventId)->exists()) {
+                         return redirect()->back()->with('error', 'Sesi "' . $subEvent->name . '" sudah penuh. Silakan batalkan pilihan Anda atau pilih sesi lain.');
+                    }
+                }
+
+                SessionRegistration::create([
+                    'registration_id' => $registration->id,
+                    'sub_event_id' => $subEventId,
+                ]);
+                $sessionsAdded[] = $subEvent->name;
+            }
+        }
+
+        $message = 'Pilihan sesi Anda berhasil diperbarui.';
+        if (!empty($sessionsAdded)) {
+            $message .= ' Sesi baru ditambahkan: ' . implode(', ', $sessionsAdded) . '.';
+        }
+
+        return redirect()->route('member.my_registrations')->with('success', $message);
     }
 }

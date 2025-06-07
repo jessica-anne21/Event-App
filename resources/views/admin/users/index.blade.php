@@ -129,11 +129,11 @@
                                         </button>
                                     </form>
 
-                                    <form action="{{ route('admin.users.delete', $user) }}" method="POST" class="inline-block ml-3" onsubmit="return confirm('Apakah Anda yakin ingin menghapus pengguna ini? Tindakan ini tidak dapat dibatalkan.');">
+                                    <!-- <form action="{{ route('admin.users.delete', $user) }}" method="POST" class="inline-block ml-3" onsubmit="return confirm('Apakah Anda yakin ingin menghapus pengguna ini? Tindakan ini tidak dapat dibatalkan.');">
                                         @csrf
                                         @method('DELETE')
                                         <button type="submit" class="text-red-600 hover:text-red-800 transition duration-200">Hapus</button>
-                                    </form>
+                                    </form> -->
                                 </td>
                             </tr>
                         @endforeach
