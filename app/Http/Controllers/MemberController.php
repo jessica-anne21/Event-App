@@ -7,9 +7,10 @@ use App\Models\Registration;
 use App\Models\SubEvent;
 use App\Models\SessionRegistration;
 use Illuminate\Http\Request;
+use chillerlan\QRCode\QRCode;
+use chillerlan\QRCode\QROptions;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
-use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Illuminate\Support\Facades\Storage;
 
 class MemberController extends Controller
@@ -87,28 +88,33 @@ class MemberController extends Controller
 
     public function showQrCode(Registration $registration)
     {
-        if (Auth::user()->role !== 'member') {
-            abort(403, 'Anda tidak memiliki akses sebagai Member.');
-        }
-        if ($registration->user_id !== Auth::id()) {
-            abort(403);
-        }
+        if (Auth::user()->role !== 'member') { abort(403, 'Anda tidak memiliki akses sebagai Member.'); }
+        if ($registration->user_id !== Auth::id()) { abort(403); }
         if ($registration->payment_status !== 'paid') {
             return redirect()->back()->with('error', 'Pembayaran Anda belum terverifikasi.');
         }
 
-        $qrCodeImage = QrCode::format('png')
-                             ->size(300)
-                             ->margin(2)
-                             ->generate($registration->registration_code);
+        // --- Penggunaan chillerlan/php-qrcode ---
+        $options = new QROptions([
+            'outputType' => QRCode::OUTPUT_IMAGE_PNG,
+            'eccLevel'   => QRCode::ECC_L, // <--- UBAH INI: Gunakan ECC_L (Level Low)
+            'scale'      => 10,
+            'imageBase64' => false,
+        ]);
+
+        $qrcode = new QRCode($options);
+        $qrCodeBinaryData = $qrcode->render($registration->registration_code); // Ini menghasilkan binary data gambar PNG
 
         $qrCodeFileName = 'qr_' . $registration->registration_code . '.png';
         $qrCodePath = 'qrcodes/' . $qrCodeFileName;
 
-        Storage::disk('public')->put($qrCodePath, $qrCodeImage);
+        // Simpan binary data gambar ke storage
+        Storage::disk('public')->put($qrCodePath, $qrCodeBinaryData);
+        // --- Akhir penggunaan chillerlan/php-qrcode ---
 
         return view('member.show_qrcode', compact('qrCodePath', 'registration'));
     }
+
 
     public function downloadCertificate(Registration $registration)
     {

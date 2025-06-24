@@ -131,15 +131,34 @@ class CommitteeController extends Controller
 
     public function deleteEvent(Event $event)
     {
-        if (Auth::user()->role !== 'committee') { abort(403, 'Anda tidak memiliki akses sebagai Panitia Kegiatan.'); }
+        // Pengecekan Peran (sudah ada)
+        if (Auth::user()->role !== 'committee') {
+            abort(403, 'Anda tidak memiliki akses sebagai Panitia Kegiatan.');
+        }
+
+        // Pengecekan Kepemilikan Event (sudah ada)
         if ($event->created_by !== Auth::id()) {
             abort(403);
         }
+
+        // --- PERUBAHAN DI SINI: Trigger jika sudah ada yang register ---
+        // Load relasi registrations untuk menghitung
+        $event->loadCount('registrations'); // Menambahkan `registrations_count` ke objek $event
+
+        if ($event->registrations_count > 0) {
+            return redirect()->back()->with('error', 'Event tidak dapat dihapus karena sudah ada ' . $event->registrations_count . ' peserta terdaftar. Silakan hubungi admin untuk bantuan.');
+        }
+        // --- AKHIR PERUBAHAN ---
+
         // Hapus poster jika ada
         if ($event->poster_path) {
             Storage::disk('public')->delete($event->poster_path);
         }
-        $event->delete();
+
+        $event->delete(); // Ini akan menghapus event utama
+        // Karena ada onDelete('cascade') di migrasi, sub_events dan registrations terkait juga akan terhapus jika diizinkan.
+        // Tapi di sini kita mencegahnya jika sudah ada registrations.
+
         return redirect()->route('committee.events.index')->with('success', 'Event berhasil dihapus.');
     }
 
